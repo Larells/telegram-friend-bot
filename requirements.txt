@@ -1,4 +1,5 @@
-aiohttp>=3.8.1,<4.0.0
+aiohttp==3.8.6
+websockets==11.0.3
 openai
 gTTS
 speechrecognition
