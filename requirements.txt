@@ -1,7 +1,8 @@
-aiohttp==3.8.6
-websockets==11.0.3
-openai
-gTTS
-speechrecognition
-pydub
-python-dotenv
+aiohttp==3.8.4
+openai==1.30.1
+python-telegram-bot==20.8
+pydub==0.25.1
+SpeechRecognition==3.10.1
+gTTS==2.5.1
+Pillow==10.3.0
+requests==2.31.0
