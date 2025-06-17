@@ -21,8 +21,7 @@ async def start(message: types.Message):
 
 @dp.message_handler(commands=["joke"])
 async def joke(message: types.Message):
-    await message.reply("Вот анекдот:
-Почему компьютер устал? Потому что у него слишком много задач!")
+    await message.reply("Вот анекдот: Почему компьютер устал? Потому что у него слишком много задач!")
 
 @dp.message_handler(content_types=types.ContentType.VOICE)
 async def handle_voice(message: types.Message):
