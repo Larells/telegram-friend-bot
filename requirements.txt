@@ -5,6 +5,7 @@ wheel
 
 # Основные библиотеки
 python-telegram-bot>=13.15,<20
+tornado==6.1
 openai
 python-dotenv
 gTTS==2.3.2
