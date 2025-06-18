@@ -15,3 +15,4 @@ pydub==0.25.1
 requests
 Pillow==11.0.0
 ffmpeg-python==0.2.0
+aiogram==2.25.1
