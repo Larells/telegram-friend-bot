@@ -1,0 +1,9 @@
+python-telegram-bot==13.15
+openai
+python-dotenv
+gTTS
+SpeechRecognition
+pydub
+requests
+pillow==10.2.0
+ffmpeg-python
