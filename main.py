@@ -1,86 +1,60 @@
-import os
 import logging
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from dotenv import load_dotenv
+import os
+from aiogram import Bot, Dispatcher, types, executor
+from config import TELEGRAM_TOKEN, ADMIN_USERNAMES
+from memory import Memory
+from dalle import generate_image
+from voice import speech_to_text, text_to_speech
+from buttons import get_keyboard
 import openai
-from gtts import gTTS
-from io import BytesIO
-import speech_recognition as sr
-from pydub import AudioSegment
-import requests
 
-# Загрузка переменных окружения
-load_dotenv()
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher(bot)
+logging.basicConfig(level=logging.INFO)
 
-# Настройка OpenAI
-openai.api_key = OPENAI_API_KEY
+memory = Memory()
 
-# Логирование
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+@dp.message_handler(commands=["start"])
+async def start(msg: types.Message):
+    await msg.answer("Привет, я твой ИИ-друг! ❤️", reply_markup=get_keyboard())
 
-# Простая память на время работы бота
-memory = {}
+@dp.message_handler(commands=["admin"])
+async def admin_cmd(msg: types.Message):
+    if msg.from_user.username in ADMIN_USERNAMES:
+        await msg.answer("Админ-команда выполнена.")
+    else:
+        await msg.answer("У тебя нет прав.")
 
-# Кнопки
-keyboard = ReplyKeyboardMarkup([["💬 Поговори", "🎨 Картинка"], ["🎤 Скажи голосом"]], resize_keyboard=True)
+@dp.message_handler(content_types=types.ContentType.VOICE)
+async def handle_voice(msg: types.Message):
+    voice_file = await msg.voice.get_file()
+    file_path = f"voice.ogg"
+    await voice_file.download(destination_file=file_path)
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Привет! Я твой ИИ-друг 🤖", reply_markup=keyboard)
+    text = speech_to_text(file_path)
+    memory.add(msg.from_user.id, "user", text)
+    await msg.answer(f"Ты сказал: {text}")
+    response = memory.chat(msg.from_user.id)
+    audio_path = text_to_speech(response)
+    await bot.send_voice(msg.chat.id, open(audio_path, "rb"))
 
-def handle_text(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
-    text = update.message.text
-    memory.setdefault(user_id, []).append(text)
-    response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[
-        {"role": "system", "content": "Ты дружелюбный собеседник."},
-        *[{"role": "user", "content": m} for m in memory[user_id][-5:]]
-    ])
-    answer = response.choices[0].message.content
-    update.message.reply_text(answer)
+@dp.message_handler(lambda m: m.text == "Сгенерировать картинку")
+async def handle_image_gen(msg: types.Message):
+    await msg.answer("Напиши описание картинки 👇")
 
-def generate_image(update: Update, context: CallbackContext):
-    update.message.reply_text("Напиши, что нарисовать!")
+@dp.message_handler()
+async def chat(msg: types.Message):
+    user_id = msg.from_user.id
+    memory.add(user_id, "user", msg.text)
 
-def handle_voice(update: Update, context: CallbackContext):
-    file = update.message.voice.get_file()
-    file_path = file.download()
-    audio = AudioSegment.from_ogg(file_path)
-    wav_path = file_path + ".wav"
-    audio.export(wav_path, format="wav")
-    r = sr.Recognizer()
-    with sr.AudioFile(wav_path) as source:
-        audio_data = r.record(source)
-        try:
-            text = r.recognize_google(audio_data, language="ru-RU")
-            update.message.reply_text(f"Ты сказал: {text}")
-            update.message.text = text
-            handle_text(update, context)
-        except sr.UnknownValueError:
-            update.message.reply_text("Не понял, попробуй ещё раз.")
+    if msg.text.startswith("Картинка:"):
+        prompt = msg.text.split("Картинка:", 1)[1].strip()
+        image_url = generate_image(prompt)
+        await msg.answer_photo(photo=image_url)
+        return
 
-def say_with_voice(update: Update, context: CallbackContext):
-    tts = gTTS(text="Я рад с тобой говорить!", lang="ru")
-    bio = BytesIO()
-    tts.write_to_fp(bio)
-    bio.seek(0)
-    update.message.reply_voice(voice=bio)
-
-def main():
-    updater = Updater(TELEGRAM_TOKEN)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.regex("🎨 Картинка"), generate_image))
-    dp.add_handler(MessageHandler(Filters.regex("🎤 Скажи голосом"), say_with_voice))
-    dp.add_handler(MessageHandler(Filters.voice, handle_voice))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
-
-    updater.start_polling()
-    updater.idle()
+    reply = memory.chat(user_id)
+    await msg.answer(reply, reply_markup=get_keyboard())
 
 if __name__ == "__main__":
-    main()
+    executor.start_polling(dp, skip_updates=True)
